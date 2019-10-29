@@ -13,8 +13,6 @@ ES_HOST = 'localhost:9200'
 ES_CLIENT_TIMEOUT = 120
 # elasticsearch index name
 ES_INDEX = 'mybiothing_current'
-# elasticsearch document type
-ES_DOC_TYPE = 'biothing'
 # Amount of time a scroll request is kept open
 ES_SCROLL_TIME = '1m'
 # Size of each scroll request return
