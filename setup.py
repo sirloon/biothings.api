@@ -41,7 +41,8 @@ if commit_hash or num_commits:
 install_requires = [
     'requests>=2.21.0',
     'tornado==5.1.1',
-    'elasticsearch==6.3.1',
+    'elasticsearch==7.0.5',
+    'elasticsearch-dsl==7.1.0',
     'gitpython==2.1.11'
 ]
 
@@ -121,6 +122,6 @@ setup(
     extras_require={
         'web_extra': web_extra_requires,
         'hub': hub_requires,
-        'dev':  web_extra_requires + hub_requires + docs_requires + test_requires
+        'dev': web_extra_requires + hub_requires + docs_requires + test_requires
     },
 )
