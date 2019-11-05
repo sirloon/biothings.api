@@ -80,7 +80,7 @@ class ESQueryBuilder(object):
         self.allow_random_query = allow_random_query
 
     def _return_query_kwargs(self, query_kwargs):
-        _kwargs = {"index": self.index, "doc_type": self.doc_type}
+        _kwargs = {"index": self.index}
         _kwargs.update(query_kwargs)
         return _kwargs 
 
