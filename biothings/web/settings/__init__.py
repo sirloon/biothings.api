@@ -6,7 +6,8 @@ a container for the `Config module`_, and any other settings that
 are the same across all handler types, e.g. the Elasticsearch client.'''
 
 import logging
-import os, types
+import os
+import types
 import socket
 from importlib import import_module
 import json
@@ -19,41 +20,47 @@ class BiothingWebSettings(object):
     ''' A container for the settings that configure the web API '''
 
     def __init__(self, config='biothings.web.settings.default'):
-        ''' The ``config`` init parameter specifies a module that configures 
-        this biothing.  For more information see `config module`_ documentation.''' 
-        self.config_mod = type(config) == types.ModuleType and config or import_module(config)
+        ''' The ``config`` init parameter specifies a module that configures
+        this biothing.  For more information see `config module`_ documentation.'''
+        self.config_mod = isinstance(config, types.ModuleType) and config or import_module(config)
         try:
             with open(os.path.abspath(self.config_mod.JSONLD_CONTEXT_PATH), 'r') as json_file:
                 self._jsonld_context = json.load(json_file)
-        except:
+        except BaseException:
             self._jsonld_context = {}
 
         # for metadata dev
-        self._app_git_repo = os.path.abspath(self.APP_GIT_REPOSITORY) if hasattr(self, 'APP_GIT_REPOSITORY') else os.path.abspath('.')
-        if not (self._app_git_repo and os.path.exists(self._app_git_repo) and 
-            os.path.isdir(self._app_git_repo) and os.path.exists(os.path.join(self._app_git_repo, '.git'))):
+        self._app_git_repo = os.path.abspath(
+            self.APP_GIT_REPOSITORY) if hasattr(
+            self, 'APP_GIT_REPOSITORY') else os.path.abspath('.')
+        if not (self._app_git_repo and os.path.exists(self._app_git_repo) and os.path.isdir(
+                self._app_git_repo) and os.path.exists(os.path.join(self._app_git_repo, '.git'))):
             self._app_git_repo = None
 
         # validate these settings?
         self.validate()
-    
+
     def __getattr__(self, name):
         try:
             return getattr(self.config_mod, name)
         except AttributeError:
-            raise AttributeError("No setting named '{}' was found, check configuration module.".format(name))
+            raise AttributeError(
+                "No setting named '{}' was found, check configuration module.".format(name))
 
     def set_debug_level(self, debug=False):
         '''Set if running API in debug mode.
         Should be called before passing ``self`` to handler initialization.'''
         self._DEBUG = debug
         return self
-    
-    def generate_app_list(self):
+
+    def generate_app_list(self, reverse=False):
         ''' Generates the tornado.web.Application `(regex, handler_class, options) tuples <http://www.tornadoweb.org/en/stable/web.html#application-configuration>`_ for this project.'''
-        return self.UNINITIALIZED_APP_LIST + [
+        INITIALIZED_APP_LIST = [
             (endpoint_regex, handler, {"web_settings": self})
             for (endpoint_regex, handler) in self.APP_LIST]
+        if reverse:
+            return INITIALIZED_APP_LIST + self.UNINITIALIZED_APP_LIST
+        return self.UNINITIALIZED_APP_LIST + INITIALIZED_APP_LIST
 
     def validate(self):
         ''' Validate these settings '''
@@ -61,9 +68,10 @@ class BiothingWebSettings(object):
 
 class BiothingESWebSettings(BiothingWebSettings):
     ''' `BiothingWebSettings`_ subclass with functions specific to an elasticsearch backend '''
+
     def __init__(self, config='biothings.web.settings.default'):
-        ''' The ``config`` init parameter specifies a module that configures 
-        this biothing.  For more information see `config module`_ documentation.''' 
+        ''' The ``config`` init parameter specifies a module that configures
+        this biothing.  For more information see `config module`_ documentation.'''
         super(BiothingESWebSettings, self).__init__(config)
 
         # get es client for web
@@ -71,9 +79,9 @@ class BiothingESWebSettings(BiothingWebSettings):
 
         # populate the metadata for this project
         self.source_metadata()
-        
+
         # initialize payload for standalone tracking batch
-        self.tracking_payload = []   
+        self.tracking_payload = []
 
     def doc_url(self, bid):
         ''' Function to return a url on this biothing API to the biothing object specified by bid.'''
@@ -96,7 +104,7 @@ class BiothingESWebSettings(BiothingWebSettings):
         ''' Caches the available fields notes for this biothing '''
         try:
             return self._available_fields_notes
-        except:
+        except BaseException:
             pass
 
         self._available_fields_notes = {}
@@ -105,7 +113,7 @@ class BiothingESWebSettings(BiothingWebSettings):
             try:
                 with open(os.path.abspath(self.AVAILABLE_FIELDS_NOTES_PATH), 'r') as inf:
                     self._available_fields_notes = json.load(inf)
-            except:
+            except BaseException:
                 pass
 
         return self._available_fields_notes
