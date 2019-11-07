@@ -12,6 +12,7 @@ This module contains functions to configure and start the `base event loop <http
 import sys
 import os
 import tornado.httpserver
+import tornado.httpclient
 import tornado.ioloop
 import tornado.web
 import tornado.escape
