@@ -43,6 +43,7 @@ def main(APP_LIST, app_settings={}, debug_settings={}, sentry_client_key=None, u
         :param sentry_client_key: Application-specific key for attaching Sentry monitor to the application
         :param use_curl: Overide the default simple_httpclient with curl_httpclient (Useful for Github Login) <https://www.tornadoweb.org/en/stable/httpclient.html>
     '''
+    global tornado
 
     define("port", default=8000, help="run on the given port", type=int)
     define("address", default="127.0.0.1", help="run on localhost")
