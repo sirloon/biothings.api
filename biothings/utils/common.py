@@ -670,6 +670,17 @@ def gunzipall(folder, pattern="*.gz"):
         suffix = ".%s" % pattern.split(".")[1]
         gunzip(f, suffix)
 
+def unxzall(folder, pattern="*.xz"):
+    '''
+    unxz all xz files in "folder", in "folder"
+    '''
+    import tarfile
+    for xzfile in glob.glob(os.path.join(folder, pattern)):
+        logging.info("unxzing '%s'", xzfile)
+        with tarfile.open(xzfile, 'r:xz') as t:
+            t.extractall(folder)
+        logging.info("done unxzing '%s'", xzfile)
+
 
 def gunzip(f, pattern="*.gz"):
     # build uncompress filename from gz file and pattern
@@ -718,6 +729,7 @@ def uncompressall(folder):
     unzipall(folder)
     untargzall(folder)
     gunzipall(folder)
+    unxzall(folder)
 
 def md5sum(fname):
     hash_md5 = hashlib.md5()
@@ -726,5 +738,13 @@ def md5sum(fname):
             hash_md5.update(chunk)
     return hash_md5.hexdigest()
 
+
 class splitstr(str):
+    """Type representing strings with space in it"""
+    pass
+class nan(object):
+    """Represents NaN type, but not as a float"""
+    pass
+class inf(object):
+    """Represents Inf type, but not as a float"""
     pass

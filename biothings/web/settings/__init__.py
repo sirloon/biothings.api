@@ -5,12 +5,17 @@ of each request, and configure the web API endpoint.  They are mostly
 a container for the `Config module`_, and any other settings that
 are the same across all handler types, e.g. the Elasticsearch client.'''
 
+import asyncio
+import json
 import logging
 import os
-import types
 import socket
+import types
 from importlib import import_module
-import json
+
+from elasticsearch import Elasticsearch
+from elasticsearch_async import AsyncElasticsearch
+
 
 # Error class
 class BiothingConfigError(Exception):
@@ -76,6 +81,7 @@ class BiothingESWebSettings(BiothingWebSettings):
 
         # get es client for web
         self.es_client = self.get_es_client()
+        self.async_es_client = self.get_es_client(sync=False)
 
         # populate the metadata for this project
         self.source_metadata()
@@ -89,7 +95,13 @@ class BiothingESWebSettings(BiothingWebSettings):
 
     def _source_metadata_object(self):
         ''' Override me to return metadata for your project '''
-        return {}
+        _meta = {}
+        try:
+            _m = self.es_client.indices.get_mapping(index=self.ES_INDEX, doc_type=self.ES_DOC_TYPE)
+            _meta = _m[list(_m.keys())[0]]['mappings'][self.ES_DOC_TYPE]['_meta']['src']
+        except BaseException:
+            pass
+        return _meta
 
     def source_metadata(self):
         ''' Function to cache return of the source metadata stored in _meta of index mappings '''
@@ -118,8 +130,13 @@ class BiothingESWebSettings(BiothingWebSettings):
 
         return self._available_fields_notes
 
-    def get_es_client(self):
-        '''Get the `Elasticsearch client <https://elasticsearch-py.readthedocs.io/en/master/>`_
-        for this app, only called once on invocation of server. '''
-        from elasticsearch import Elasticsearch
-        return Elasticsearch(self.ES_HOST, timeout=getattr(self, 'ES_CLIENT_TIMEOUT', 120))
+    def get_es_client(self, sync=True):
+        '''
+        Get the `Elasticsearch client <https://elasticsearch-py.readthedocs.io/en/master/>`_
+        for this app, only called once on invocation of server.
+        '''
+
+        if sync:
+            return Elasticsearch(self.ES_HOST, timeout=getattr(self, 'ES_CLIENT_TIMEOUT', 120))
+
+        return AsyncElasticsearch(self.ES_HOST, timeout=getattr(self, 'ES_CLIENT_TIMEOUT', 120))

@@ -349,8 +349,9 @@ class DataBuilder(object):
 
     def get_stats(self,sources,job_manager):
         """
-        Return a dictionnary of metadata for this build. It's usually app-specific 
-        and this method may be overridden as needed.
+        Return a dictionnary of metadata for this build. It's usually app-specific
+        and this method may be overridden as needed. By default though, the total
+        number of documents in the merged collection is stored (key "total")
 
         Return dictionary will be merged with any existing metadata in
         src_build collection. This behavior can be changed by setting a special
@@ -363,7 +364,8 @@ class DataBuilder(object):
         of its implementation:
         asyncio.set_event_loop(job_manager.loop)
         """
-        return {}
+        total = self.target_backend.target_collection.count()
+        return {"total" : total}
 
     def get_custom_metadata(self, sources, job_manager):
         """
@@ -372,7 +374,6 @@ class DataBuilder(object):
         before storage.
         """
         return {}
-
 
     def get_mapping(self,sources):
         """
@@ -397,12 +398,11 @@ class DataBuilder(object):
         self.mapping = self.get_mapping(sources)
         self.stats = self.get_stats(sources,job_manager)
         self.custom_metadata = self.get_custom_metadata(sources,job_manager)
-        self.build_metadata = self.get_build_metadata()
         # also search for _meta in build_config
         bmeta = self.build_config.get("_meta")
         if bmeta:
             self.logger.info("Found _meta in build_config, merging: %s" % pformat(bmeta))
-            self.build_metadata.update(self.build_config.get("_meta",{}))
+            self.custom_metadata.update(self.build_config.get("_meta",{}))
 
     def update_src_meta_stats(self):
         for src,count in self.merge_stats.items():
@@ -811,6 +811,7 @@ class LinkDataBuilder(DataBuilder):
                 "Found more than one source to link, not allowed: %s" % conf["sources"]
         assert hasattr(self.target_backend,"datasource_name")
         self.target_backend.datasource_name = conf["sources"][0]
+        self.target_backend.source_db = self.source_backend
 
     @asyncio.coroutine
     def merge_source(self, src_name, *args, **kwargs):
@@ -881,6 +882,15 @@ class BuilderManager(BaseManager):
         self.builder_classes = {}
         self.poll_schedule = poll_schedule
         self.setup_log()
+
+    def clean_stale_status(self):
+        src_build = get_src_build()
+        for build in src_build.find():
+            for job in build.get("jobs",[]):
+                if job.get("status") == "building":
+                    logging.warning("Found stale build '%s', marking build status as 'canceled'" % build["_id"])
+                    job["status"] = "canceled"
+            src_build.replace_one({"_id":build["_id"]},build)
 
     @property
     def source_backend(self):
@@ -994,7 +1004,7 @@ class BuilderManager(BaseManager):
         docs = get_src_build().find(q)
         by_confs = {}
         for d in docs:
-            by_confs.setdefault(d["build_config"]["name"],[]).append(d["_id"])
+            by_confs.setdefault(d.get("build_config",{}).get("name",None),[]).append(d["_id"])
         if build_config:
             return sorted(by_confs.get(build_config,[]))
         else:

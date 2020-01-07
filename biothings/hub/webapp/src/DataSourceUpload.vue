@@ -73,7 +73,7 @@
                                         <input type="text" id="release" placeholder="Specify a release (optional)" autofocus v-if="info.uploader.dummy">
                                     </div>
                                     <div class="required six wide field">
-                                        <button :class="['ui labeled small icon button',info.status == 'uploading' ? 'disabled' : '']" @click="do_upload(subsrc=subsrc);">
+                                        <button :class="['ui labeled small icon button',info.status == 'uploading' ? 'disabled' : '']" @click="do_upload(subsrc)">
                                             <i class="database icon"></i>
                                             Upload
                                         </button>
@@ -99,11 +99,25 @@ export default {
     name: 'data-source-upload',
     props: ['source'],
     mounted () {
-        $('.menu .item').tab();
+        this.setup();
     },
     components: { },
+    watch: {
+        maps: function(newv,oldv) {
+            if(newv != oldv) {
+                // there's a race condition here: if multiple mappings updated in very little time,
+                // not all tabs will be setup properly (some could be ignored depending on the time
+                // spent to set it up and the events telling us they have changed)
+                // Note: same as in DataSourceMapping.vue
+                this.setup(); // refresh tabs
+            }
+        },
+    },
     methods: {
-        do_upload(subsrc=null) {
+        setup: function() {
+            $('.menu .item').tab();
+        },
+        do_upload: function(subsrc=null) {
             return this.$parent.upload(subsrc=subsrc);
         },
     },

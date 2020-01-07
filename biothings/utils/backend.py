@@ -3,7 +3,7 @@ from functools import partial
 
 from biothings.utils.es import ESIndexer
 from biothings import config as btconfig
-from elasticsearch.exceptions import NotFoundError
+from elasticsearch.exceptions import NotFoundError, TransportError
 
 # Generic base backend
 class DocBackendBase(object):
@@ -92,6 +92,13 @@ class DocMongoBackend(DocBackendBase):
             self._target_db = target_db
         if target_collection:
             self.target_collection = target_collection
+
+    def __eq__(self, other):
+        if not isinstance(other,DocMongoBackend):
+            return False
+        return self.target_name == other.target_name and \
+               self.target_collection.database.name == other.target_collection.database.name and \
+               self.target_collection.database.client.address == other.target_collection.database.client.address
 
     @property
     def target_name(self):
@@ -260,7 +267,10 @@ class DocESBackend(DocBackendBase):
         self.target_esidxer.verify_mapping(update_mapping=update_mapping)
 
     def count(self):
-        return self.target_esidxer.count()
+        try:
+            return self.target_esidxer.count()
+        except TransportError:
+            return None
 
     def insert(self, doc_li):
         self.target_esidxer.add_docs(doc_li)

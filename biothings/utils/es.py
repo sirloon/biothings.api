@@ -7,7 +7,7 @@ import time
 from elasticsearch import Elasticsearch, NotFoundError, RequestError, TransportError
 from elasticsearch import helpers
 
-from biothings.utils.common import iter_n, splitstr
+from biothings.utils.common import iter_n, splitstr, nan, inf
 from biothings.utils.dataload import dict_walk
 
 # setup ES logging
@@ -70,19 +70,21 @@ class IndexerException(Exception):
 
 class ESIndexer():
     def __init__(self, index, doc_type, es_host, step=10000,
-                 number_of_shards=10, number_of_replicas=0, **kwargs):
+                 number_of_shards=10, number_of_replicas=0, 
+                 check_index=True, **kwargs):
         self.es_host = es_host
         self._es = get_es(es_host, **kwargs)
-        # if index is actually an alias, resolve the alias to
-        # the real underlying index
-        try:
-            res = self._es.indices.get_alias(index)
-            # this was an alias
-            assert len(res) == 1, "Expecing '%s' to be an alias, but got nothing..." % index
-            self._index = list(res.keys())[0]
-        except NotFoundError:
-            # this was a real index name
-            self._index = index
+        if check_index:
+            # if index is actually an alias, resolve the alias to
+            # the real underlying index
+            try:
+                res = self._es.indices.get_alias(index)
+                # this was an alias
+                assert len(res) == 1, "Expecing '%s' to be an alias, but got nothing..." % index
+                self._index = list(res.keys())[0]
+            except NotFoundError:
+                # this was a real index name
+                self._index = index
         self._doc_type = None
         if doc_type:
             self._doc_type = doc_type
@@ -93,7 +95,8 @@ class ESIndexer():
                 assert len(m) == 1, "Expected only one doc type, got: %s" % m.keys()
                 self._doc_type = list(m).pop()
             except Exception as e:       # pylint: disable=broad-except
-                logging.info("Failed to guess doc_type: %s", e)
+                if check_index:
+                    logging.info("Failed to guess doc_type: %s", e)
         self.number_of_shards = number_of_shards            # set number_of_shards when create_index
         self.number_of_replicas = int(number_of_replicas)   # set number_of_replicas when create_index
         self.step = step   # the bulk size when doing bulk operation.
@@ -134,8 +137,11 @@ class ESIndexer():
 
     @wrapper
     def count(self, q=None, raw=False):
-        _res = self._es.count(self._index, self._doc_type, q)
-        return _res if raw else _res['count']
+        try:
+            _res = self._es.count(self._index, self._doc_type, q)
+            return _res if raw else _res['count']
+        except NotFoundError:
+            return None
 
     @wrapper
     def count_src(self, src):
@@ -519,6 +525,7 @@ class ESIndexer():
     def snapshot(self, repo, snapshot, mode=None, **params):
         body = {"indices": self._index}
         if mode == "purge":
+            # Note: this works, just for small one when deletion is done instantly
             try:
                 self._es.snapshot.get(repo, snapshot)
                 # if we can get it, we have to delete it
@@ -529,7 +536,7 @@ class ESIndexer():
         try:
             return self._es.snapshot.create(repo, snapshot, body=body, params=params)
         except RequestError as e:
-            raise IndexerException("Can't snapshot '%s' (if already exists, use mode='purge'): %s" % (self._index, e))
+            raise IndexerException("Can't snapshot '%s': %s" % (self._index, e))
 
     def restore(self, repo_name, snapshot_name, index_name=None, purge=False, body=None):
         index_name = index_name or snapshot_name
@@ -684,9 +691,13 @@ def generate_es_mapping(inspect_doc, init=True, level=0):
                 else:
                     # typ = [t for t in typ if t is not type(None)][0]      # TODO: Confirm this line
                     typ = [t for t in typ if not isinstance(t, none_type)][0]
+                if typ is nan or typ is inf:
+                    raise TypeError(typ)
                 mapping[rootk] = map_tpl[typ]
-            except Exception:              # pylint: disable=broad-except
-                errors.append("Can't find map type %s for key %s", inspect_doc[rootk], rootk)
+            except KeyError:
+                errors.append("Can't find map type %s for key %s" % (inspect_doc[rootk], rootk))
+            except TypeError:
+                errors.append("Type %s for key %s isn't allowed in ES mapping" % (typ,rootk))
         elif inspect_doc[rootk] == {}:
             typ = rootk
             return map_tpl[typ]
@@ -800,7 +811,7 @@ class Database(IDatabase):
     def create_if_needed(self, colname):
         conn = self.get_conn()
         # add dot to make it a special index so it's hidden by default in ES gui
-        idxcolname = ".%s_%s" % (self.name, colname)
+        idxcolname = "%s_%s" % (self.name, colname)
         # it's not usefull to scale internal hubdb
         body = {
             'settings': {
@@ -830,7 +841,7 @@ class Collection(object):
 
     @property
     def dbname(self):
-        return ".%s_%s" % (self.db.name, self.colname)
+        return "%s_%s" % (self.db.name, self.colname)
 
     @property
     def name(self):
@@ -850,7 +861,7 @@ class Collection(object):
         if args and len(args) == 1 and isinstance(args[0], dict) and args[0]:
             query = {"query": {"match": args[0]}}
         # it's key/value search, let's iterate
-        res = self.get_conn().search(self.dbname, self.colname, query)
+        res = self.get_conn().search(self.dbname, self.colname, query, size=10000)
         for _src in res["hits"]["hits"]:
             doc = {"_id": _src["_id"]}
             doc.update(_src["_source"])
@@ -870,12 +881,9 @@ class Collection(object):
         if check_unique and not res["result"] == "created":
             raise Exception("Couldn't insert document '%s'" % doc)
 
-    def update_one(self, query, what):
-        # assert len(what) == 1 and ("$set" in what or \
-        #         "$unset" in what or "$push" in what), "$set/$unset/$push operators not found"      # TODO: Confirm this line
-        assert (len(what) == 1
-                and ("$set" in what or "$unset" in what or "$push" in what)), "$set/$unset/$push operators not found"
-
+    def update_one(self, query, what, upsert=False):
+        assert (len(what) == 1 and ("$set" in what or "$unset" in what or "$push" in what)), \
+               "$set/$unset/$push operators not found"
         doc = self.find_one(query)
         if doc:
             if "$set" in what:
@@ -892,6 +900,12 @@ class Collection(object):
                     assert "." not in listkey, "$push not supported for nested keys: %s" % listkey
                     doc.setdefault(listkey, []).append(elem)
 
+            self.save(doc)
+        elif upsert:
+            assert "_id" in query, "Can't upsert without _id"
+            assert "$set" in what, "Upsert needs $set operator (it makes sense...)"
+            doc = what["$set"]
+            doc["_id"] = query["_id"]
             self.save(doc)
 
     def update(self, query, what):
