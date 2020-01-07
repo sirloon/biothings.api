@@ -330,12 +330,10 @@ class ESResultTransformer(object):
             ''' takes a tuple, returns the key name as a string '''
             return sep.join(t).replace('.properties', '')
 
-        # assumes only one doc_type in the index... maybe a bad assumption
         _index = next(iter(res))
-        _doc_type = next(iter(res[_index]['mappings']))
         if fields:
             # this is an available fields request
-            _properties = res[_index]['mappings'][_doc_type]['properties']
+            _properties = res[_index]['mappings']['properties']
             _fields = OrderedDict()
             for (k, v) in breadth_first_traversal(_properties):
                 if isinstance(v, dict):
@@ -370,7 +368,7 @@ class ESResultTransformer(object):
             return OrderedDict(sorted(_fields.items(), key=lambda x: x[0]))
 
         # normal metadata request
-        _meta = res[_index]['mappings'][_doc_type].get('_meta', {})
+        _meta = res[_index]['mappings'].get('_meta', {})
         if self.options.dev:
             _meta['software'] = self._get_software_info()
         return self._sort_and_annotate_doc(_meta)
