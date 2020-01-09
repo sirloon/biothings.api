@@ -9,13 +9,16 @@ This module contains functions to configure and start the `base event loop <http
 
     The **main** function is the boot script for all BioThings API webservers.
 '''
-import sys
 import os
-import tornado.httpserver
+import sys
+import warnings
+from sys import platform
+
+import tornado.escape
 import tornado.httpclient
+import tornado.httpserver
 import tornado.ioloop
 import tornado.web
-import tornado.escape
 from tornado.options import define, options
 
 __USE_SENTRY__ = True
@@ -34,7 +37,8 @@ def get_app(APP_LIST, **settings):
     ''' Return an Application instance. '''
     return tornado.web.Application(APP_LIST, **settings)
 
-def main(APP_LIST, app_settings={}, debug_settings={}, sentry_client_key=None, use_curl=False):
+def main(APP_LIST, app_settings={}, debug_settings={},
+         sentry_client_key=None, use_curl=False, multi_process=False):
     ''' Main ioloop configuration and start
 
         :param APP_LIST: a list of `URLSpec objects or (regex, handler_class) tuples <http://www.tornadoweb.org/en/stable/web.html#tornado.web.Application>`_
@@ -78,6 +82,13 @@ def main(APP_LIST, app_settings={}, debug_settings={}, sentry_client_key=None, u
             "tornado.curl_httpclient.CurlAsyncHTTPClient")
     http_server = tornado.httpserver.HTTPServer(application)
     http_server.listen(options.port, address=options.address)
+    if multi_process:
+        if platform == "win32":
+            warnings.warn("Multi-process mode not supported on Windows.")
+            http_server.start(1)
+        else:
+            http_server.start(0)  # forks one process per cpu
+
     loop = tornado.ioloop.IOLoop.instance()
     if options.debug:
         tornado.autoreload.start(loop)
