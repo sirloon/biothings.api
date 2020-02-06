@@ -21,9 +21,9 @@ Scenario('Register data plugin', (I) => {
   I.fillField("#huburl","http://localhost:7080");
   I.clickIfVisible("#huburl_ok");
   // check nothing registered
-  I.seeTextEquals("0","i.database.icon + span")
-  I.see("NO") // no document yet
-  I.see("DOCUMENT (YET)")
+  //I.seeTextEquals("0","i.database.icon + span")
+  //I.see("NO") // no document yet
+  //I.see("DOCUMENT (YET)")
   // register
   I.click("Sources");
   I.click("Menu");
