@@ -10,12 +10,12 @@ test_utils:
 	nosetests utils
 
 docker_pull:
-	docker pull biothings/biothings-studio
+	docker pull biothings/biothings-studio:0.2a
 docker_run:
 	-docker kill test_studio
 	sleep 5
 	while docker ps | grep test_studio; do sleep 1; done
-	docker run --rm --name test_studio -p 8080:8080 -p 7080:7080 -p 8000:8000 -d biothings/biothings-studio
+	docker run --rm --name test_studio -p 8080:8080 -p 7080:7080 -p 8000:8000 -d biothings/biothings-studio:0.2a
 	while ! curl localhost:7080; do echo waiting for hub api to run; sleep 5; done
 npm_install:
 	cd webapp/pharmgkb && npm install
