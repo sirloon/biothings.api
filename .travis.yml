@@ -7,4 +7,4 @@ before_install:
   - pip install -r requirements.txt
 
 script:
-- cd biothings/tests/hub && make
+- cd biothings/tests/hub && make apitest webapptest
